@@ -1,0 +1,70 @@
+#!/usr/bin/env node
+
+import * as path from 'path';
+import { Pipeline } from './pipeline.js';
+import { JsonSemanticModelStorage } from './storage/semantic-model-storage.js';
+
+// Export everything for programmatic use
+export { Pipeline } from './pipeline.js';
+export { JsonSemanticModelStorage } from './storage/semantic-model-storage.js';
+export * from './semantic-model/types.js';
+export { KnowledgeGraph } from './stage5-graph/graph.js';
+
+// CLI Execution Support
+async function runCLI() {
+  const args = process.argv.slice(2);
+  const targetDir = args[0] ? path.resolve(args[0]) : process.cwd();
+
+  console.log(`\n==================================================`);
+  console.log(` MASAI Knowledge Graph Builder v1.0.0`);
+  console.log(`==================================================`);
+  console.log(`Target Directory : ${targetDir}`);
+  console.log(`Starting analysis...\n`);
+
+  const startTime = Date.now();
+  const pipeline = new Pipeline();
+
+  try {
+    const model = await pipeline.buildFull(targetDir);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    console.log(`✓ Analysis completed successfully in ${duration}s!`);
+    console.log(`--------------------------------------------------`);
+    console.log(`Files Processed  : ${model.fileCount}`);
+    console.log(`Total Symbols    : ${model.symbolCount}`);
+    console.log(`Resolved Refs    : ${model.resolvedReferences.length}`);
+    console.log(`Diagnostics/Warns: ${model.diagnostics.length}`);
+
+    // Persist model
+    const storage = new JsonSemanticModelStorage();
+    await storage.save(model, targetDir);
+    console.log(`\nSaved semantic model to:`);
+    console.log(`  ${path.join(targetDir, '.masai', 'semantic-model.json')}`);
+
+    // Derive graph stats
+    const graph = pipeline.deriveGraph(model);
+    const stats = graph.stats();
+    console.log(`\nDerived Knowledge Graph stats:`);
+    console.log(`  Total Nodes: ${stats.nodes}`);
+    console.log(`  Total Edges: ${stats.edges}`);
+    console.log(`  Edges by Kind:`);
+    for (const [kind, count] of Object.entries(stats.byKind)) {
+      console.log(`    - ${kind}: ${count}`);
+    }
+    console.log(`==================================================\n`);
+  } catch (err: any) {
+    console.error(`\n❌ Error during analysis:`, err.message || err);
+    process.exit(1);
+  }
+}
+
+// Run CLI if this file is executed directly
+const currentFilePath = path.resolve(process.argv[1] || '');
+const isExecutedDirectly = 
+  currentFilePath.endsWith('index.ts') || 
+  currentFilePath.endsWith('index.js') || 
+  currentFilePath.endsWith('index.mjs');
+
+if (isExecutedDirectly) {
+  runCLI();
+}

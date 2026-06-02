@@ -1,0 +1,150 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { detectLanguage } from './lang-detect.js';
+import { ParsedFile } from './parsed-file.js';
+import { parserRegistry } from './parser-registry.js';
+
+const DEFAULT_EXCLUDE = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  '__pycache__',
+  '.git',
+]);
+
+/**
+ * A helper to match path against simple .gitignore patterns.
+ */
+class GitIgnoreMatcher {
+  private rules: { regex: RegExp; negate: boolean; dirOnly: boolean }[] = [];
+
+  constructor(content: string) {
+    const lines = content.split(/\r?\n/);
+    for (let line of lines) {
+      line = line.trim();
+      if (!line || line.startsWith('#')) continue;
+
+      let negate = false;
+      if (line.startsWith('!')) {
+        negate = true;
+        line = line.slice(1);
+      }
+
+      const dirOnly = line.endsWith('/');
+      if (dirOnly) {
+        line = line.slice(0, -1);
+      }
+
+      // Convert simple glob pattern to RegExp
+      // Escape special characters except *, ?, [!...]
+      let regexStr = line
+        .replace(/[-\/\\^$+?.()|[\]{}]/g, '\\$&') // escape regex chars
+        .replace(/\\\*/g, '.*')                    // * -> .*
+        .replace(/\\\?/g, '.');                    // ? -> .
+      
+      // If it has no slashes, match anywhere in path (i.e. starts with .* / or is boundary)
+      if (!line.includes('/')) {
+        regexStr = '(^|/)' + regexStr + '($|/)';
+      } else {
+        // If it starts with a slash, match from start
+        if (line.startsWith('/')) {
+          regexStr = '^' + regexStr.slice(1);
+        } else {
+          regexStr = '(^|/)' + regexStr;
+        }
+      }
+
+      try {
+        const regex = new RegExp(regexStr);
+        this.rules.push({ regex, negate, dirOnly });
+      } catch (err) {
+        // Ignore malformed patterns
+      }
+    }
+  }
+
+  public shouldIgnore(relativePath: string, isDirectory: boolean): boolean {
+    const normalized = relativePath.replace(/\\/g, '/');
+    let ignored = false;
+
+    for (const rule of this.rules) {
+      if (rule.dirOnly && !isDirectory) continue;
+      
+      if (rule.regex.test(normalized)) {
+        ignored = !rule.negate;
+      }
+    }
+
+    return ignored;
+  }
+}
+
+/**
+ * Walks a directory recursively and parses supported files.
+ */
+export async function parseProject(projectRoot: string): Promise<ParsedFile[]> {
+  const normalizedRoot = path.resolve(projectRoot);
+  const parsedFiles: ParsedFile[] = [];
+
+  // Try to load gitignore
+  let gitignoreMatcher: GitIgnoreMatcher | null = null;
+  try {
+    const gitignorePath = path.join(normalizedRoot, '.gitignore');
+    const content = await fs.readFile(gitignorePath, 'utf-8');
+    gitignoreMatcher = new GitIgnoreMatcher(content);
+  } catch (err) {
+    // No .gitignore, that's fine
+  }
+
+  async function walk(currentDir: string) {
+    const entries = await fs.readdir(currentDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      const relativePath = path.relative(normalizedRoot, fullPath);
+      const isDirectory = entry.isDirectory();
+
+      // Skip default excluded folders
+      if (DEFAULT_EXCLUDE.has(entry.name)) continue;
+
+      // Skip dotfiles/hidden folders (except current dir references)
+      if (entry.name.startsWith('.') && entry.name !== '.' && entry.name !== '..') continue;
+
+      // Respect .gitignore
+      if (gitignoreMatcher && gitignoreMatcher.shouldIgnore(relativePath, isDirectory)) {
+        continue;
+      }
+
+      if (isDirectory) {
+        await walk(fullPath);
+      } else {
+        const lang = detectLanguage(entry.name);
+        if (lang) {
+          try {
+            const sourceCode = await fs.readFile(fullPath, 'utf-8');
+            const parser = parserRegistry.getParser(lang);
+            const tree = parser.parse(sourceCode);
+            
+            // Normalize path slashes to forward slashes for the semantic model
+            const normRelative = relativePath.replace(/\\/g, '/');
+            const normAbsolute = fullPath.replace(/\\/g, '/');
+
+            parsedFiles.push({
+              filePath: normRelative,
+              absolutePath: normAbsolute,
+              language: lang,
+              tree,
+              sourceCode,
+            });
+          } catch (err) {
+            // Keep going, but log parse warning if needed
+            console.error(`Failed to parse file ${fullPath}:`, err);
+          }
+        }
+      }
+    }
+  }
+
+  await walk(normalizedRoot);
+  return parsedFiles;
+}
