@@ -4,15 +4,31 @@ import * as path from 'path';
 import { Pipeline } from './pipeline.js';
 import { JsonSemanticModelStorage } from './storage/semantic-model-storage.js';
 
+import { startServer } from './serve.js';
+
 // Export everything for programmatic use
 export { Pipeline } from './pipeline.js';
 export { JsonSemanticModelStorage } from './storage/semantic-model-storage.js';
 export * from './semantic-model/types.js';
 export { KnowledgeGraph } from './stage5-graph/graph.js';
+export { startServer } from './serve.js';
 
 // CLI Execution Support
 async function runCLI() {
   const args = process.argv.slice(2);
+  const command = args[0];
+
+  if (command === 'serve' || command === 'visualize') {
+    const targetDir = args[1] ? path.resolve(args[1]) : process.cwd();
+    try {
+      await startServer(targetDir);
+    } catch (err: any) {
+      console.error(`\n❌ Error starting server:`, err.message || err);
+      process.exit(1);
+    }
+    return;
+  }
+
   const targetDir = args[0] ? path.resolve(args[0]) : process.cwd();
 
   console.log(`\n==================================================`);

@@ -205,4 +205,177 @@ describe('Stage 4 - Resolve', () => {
     expect(result.unresolved.length).toBe(1);
     expect(result.unresolved[0].id).toBe(refCand.id);
   });
+
+  test('Resolves Python relative imports and package init modules', () => {
+    // File services/local.py defines config
+    const fileLocal = createSymbol({
+      filePath: 'services/local.py',
+      chain: ['services/local.py'],
+      kind: 'file',
+      range: { start: { line: 0, column: 0 }, end: { line: 5, column: 0 } }
+    });
+
+    const configSym = createSymbol({
+      filePath: 'services/local.py',
+      chain: ['config'],
+      kind: 'variable',
+      range: { start: { line: 2, column: 0 }, end: { line: 2, column: 10 } },
+      exported: true
+    });
+
+    // File services/user.py does relative import from .local import config
+    const fileUser = createSymbol({
+      filePath: 'services/user.py',
+      chain: ['services/user.py'],
+      kind: 'file',
+      range: { start: { line: 0, column: 0 }, end: { line: 5, column: 0 } }
+    });
+
+    const relativeImportRef = createReferenceCandidate({
+      fromSymbolId: fileUser.id,
+      kind: 'import',
+      rawName: 'config',
+      qualifierChain: ['config'],
+      importPath: '/local',
+      astNodeType: 'import_from_statement',
+      filePath: 'services/user.py',
+      range: { start: { line: 1, column: 0 }, end: { line: 1, column: 25 } }
+    });
+
+    const registry = new SymbolRegistry();
+    const model: MergeableModel = {
+      symbols: [fileLocal, configSym, fileUser],
+      scopes: [],
+      containments: [],
+      references: [relativeImportRef],
+      diagnostics: []
+    };
+
+    registry.build(model);
+
+    const result = resolveAll(model.references, registry, model.containments);
+
+    expect(result.unresolved.length).toBe(0);
+    expect(result.resolved.length).toBe(1);
+    expect(result.resolved[0].toSymbolId).toBe(configSym.id);
+  });
+
+  test('Resolves aliased imports and dotted prefixes correctly', () => {
+    // File services/user.py defines UserService class and save method
+    const fileUser = createSymbol({
+      filePath: 'services/user.py',
+      chain: ['services/user.py'],
+      kind: 'file',
+      range: { start: { line: 0, column: 0 }, end: { line: 20, column: 0 } }
+    });
+
+    const userServiceClass = createSymbol({
+      filePath: 'services/user.py',
+      chain: ['UserService'],
+      kind: 'class',
+      range: { start: { line: 2, column: 0 }, end: { line: 10, column: 0 } },
+      exported: true
+    });
+
+    const saveMethod = createSymbol({
+      filePath: 'services/user.py',
+      chain: ['UserService', 'save'],
+      kind: 'method',
+      range: { start: { line: 4, column: 4 }, end: { line: 6, column: 8 } }
+    });
+
+    const containments = [
+      createContainment(fileUser.id, userServiceClass.id, 'owns'),
+      createContainment(userServiceClass.id, saveMethod.id, 'has_member')
+    ];
+
+    // File main.py imports: from services.user import UserService as US
+    // and calls US.save
+    const fileMain = createSymbol({
+      filePath: 'main.py',
+      chain: ['main.py'],
+      kind: 'file',
+      range: { start: { line: 0, column: 0 }, end: { line: 20, column: 0 } }
+    });
+
+    const importRef = createReferenceCandidate({
+      fromSymbolId: fileMain.id,
+      kind: 'import',
+      rawName: 'US',
+      qualifierChain: ['US'],
+      importPath: 'services/user',
+      astNodeType: 'import_from_statement',
+      filePath: 'main.py',
+      range: { start: { line: 1, column: 0 }, end: { line: 1, column: 40 } },
+      metadata: { importedName: 'UserService' }
+    });
+
+    const callRef = createReferenceCandidate({
+      fromSymbolId: fileMain.id,
+      kind: 'call',
+      rawName: 'US.save',
+      qualifierChain: ['US', 'save'],
+      astNodeType: 'call_expression',
+      filePath: 'main.py',
+      range: { start: { line: 3, column: 0 }, end: { line: 3, column: 9 } }
+    });
+
+    // Another file main2.py imports: import services.user
+    // and calls services.user.UserService
+    const fileMain2 = createSymbol({
+      filePath: 'main2.py',
+      chain: ['main2.py'],
+      kind: 'file',
+      range: { start: { line: 0, column: 0 }, end: { line: 20, column: 0 } }
+    });
+
+    const dottedImportRef = createReferenceCandidate({
+      fromSymbolId: fileMain2.id,
+      kind: 'import',
+      rawName: 'services.user',
+      qualifierChain: ['services.user'],
+      importPath: 'services/user',
+      astNodeType: 'import_statement',
+      filePath: 'main2.py',
+      range: { start: { line: 1, column: 0 }, end: { line: 1, column: 20 } }
+    });
+
+    const dottedCallRef = createReferenceCandidate({
+      fromSymbolId: fileMain2.id,
+      kind: 'call',
+      rawName: 'services.user.UserService',
+      qualifierChain: ['services', 'user', 'UserService'],
+      astNodeType: 'call_expression',
+      filePath: 'main2.py',
+      range: { start: { line: 3, column: 0 }, end: { line: 3, column: 25 } }
+    });
+
+    const registry = new SymbolRegistry();
+    const model: MergeableModel = {
+      symbols: [fileUser, userServiceClass, saveMethod, fileMain, fileMain2],
+      scopes: [],
+      containments,
+      references: [importRef, callRef, dottedImportRef, dottedCallRef],
+      diagnostics: []
+    };
+
+    registry.build(model);
+
+    const result = resolveAll(model.references, registry, model.containments);
+
+    expect(result.unresolved.length).toBe(0);
+    expect(result.resolved.length).toBe(4);
+
+    const resolvedUS = result.resolved.find(r => r.candidateId === importRef.id);
+    expect(resolvedUS?.toSymbolId).toBe(userServiceClass.id);
+
+    const resolvedUSCall = result.resolved.find(r => r.candidateId === callRef.id);
+    expect(resolvedUSCall?.toSymbolId).toBe(saveMethod.id);
+
+    const resolvedDottedImport = result.resolved.find(r => r.candidateId === dottedImportRef.id);
+    expect(resolvedDottedImport?.toSymbolId).toBe(fileUser.id);
+
+    const resolvedDottedCall = result.resolved.find(r => r.candidateId === dottedCallRef.id);
+    expect(resolvedDottedCall?.toSymbolId).toBe(userServiceClass.id);
+  });
 });

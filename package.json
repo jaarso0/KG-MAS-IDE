@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsup src/index.ts --format esm --dts",
+    "serve": "tsx src/index.ts serve",
     "test": "vitest run",
     "test:watch": "vitest"
   },
