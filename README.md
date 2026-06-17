@@ -10,92 +10,13 @@ MASAI-KG is a high-fidelity static analysis pipeline designed to process multi-l
 - **Two-Phase Reference Resolution**: Decouples import path mapping from lexical variable and member lookup to avoid resolution order cycles.
 - **Agent-Ready Graph API**: Supports graph traversal operations, including localized Breadth-First Search (BFS) neighborhood extraction to construct compact subgraphs for LLM context windows.
 
-## Installation
 
-Ensure you have Node.js (version 20 or higher) installed on your system.
-
-Install the dependencies:
-
-```bash
-npm install
-```
-
-## CLI & Execution Commands
-
-### 1. Running the Parser Pipeline
-
-The CLI parses a target codebase, builds a semantic model, prints a diagnostic report, and persists the serialized JSON model.
-
-#### Running in Development (JIT Compilation)
-
-```bash
-npm run dev -- <path-to-target-project>
-```
-
-*If no path is specified, the pipeline defaults to the current working directory.*
-
-#### Production Build & Run
-
-To compile the production ESM bundle and type declarations:
-
-```bash
-npm run build
-```
-
-Then run the compiled script using:
-
-```bash
-node dist/index.js <path-to-target-project>
-```
-
-#### Serialized Artifact
-
-The pipeline persists the finalized semantic model to:
-```
-<path-to-target-project>/.masai/semantic-model.json
-```
-
----
-
-### 2. Running the Interactive Visualizer
-
-The visualizer provides a web-based, interactive 2D node-link graph visualization of the extracted knowledge graph, including a details inspector and neighborhood search.
-
-#### Prerequisite: Build the Frontend Assets
-Before running the server, build the production visualizer assets:
-
-```bash
-cd visualizer
-npm install
-npm run build
-cd ..
-```
-
-#### Start the Server
-Start the local HTTP server to load the serialized model and host the visualizer:
-
-```bash
-npm run serve -- <path-to-target-project>
-```
-*Note: This command will attempt to automatically open your default browser at `http://localhost:3000` (or the next available port).*
-
-#### Running in Frontend Development Mode (with Hot Reloading)
-If you are developing the visualizer UI and want Hot Module Replacement (HMR):
-
-1. **Start the backend server** in the root directory to serve the API on port 3000:
-   ```bash
-   npm run serve -- <path-to-target-project>
-   ```
-2. **Start the Vite development server** in a separate terminal:
-   ```bash
-   cd visualizer
-   npm run dev
-   ```
-   *This serves the frontend UI at `http://localhost:5173` and proxies API requests to the backend server.*
-
----
 
 ## FastAPI Retrieval & Build Service
+
+RUN AT PORT 8001
+
+
 
 MASAI-KG includes a FastAPI web service wrapper to allow external applications (like `MAS_IDE`) to query the retrieval engine and trigger model generation over HTTP.
 
@@ -110,7 +31,7 @@ pip install fastapi uvicorn pydantic
 
 ### 2. Start the Service
 
-From the `masai -kg - Copy (2)` root folder, start the server on port `8001`:
+From the `KG-MAS-IDE` root folder, start the server on port `8001`:
 
 ```bash
 python -m uvicorn app:app --reload --port 8001
@@ -219,6 +140,92 @@ async function main() {
 
 main();
 ```
+
+---
+
+
+## Installation
+
+Ensure you have Node.js (version 20 or higher) installed on your system.
+
+Install the dependencies:
+
+```bash
+npm install
+```
+
+## CLI & Execution Commands
+
+### 1. Running the Parser Pipeline
+
+The CLI parses a target codebase, builds a semantic model, prints a diagnostic report, and persists the serialized JSON model.
+
+#### Running in Development (JIT Compilation)
+
+```bash
+npm run dev -- <path-to-target-project>
+```
+
+*If no path is specified, the pipeline defaults to the current working directory.*
+
+#### Production Build & Run
+
+To compile the production ESM bundle and type declarations:
+
+```bash
+npm run build
+```
+
+Then run the compiled script using:
+
+```bash
+node dist/index.js <path-to-target-project>
+```
+
+#### Serialized Artifact
+
+The pipeline persists the finalized semantic model to:
+```
+<path-to-target-project>/.masai/semantic-model.json
+```
+
+---
+
+### 2. Running the Interactive Visualizer
+
+The visualizer provides a web-based, interactive 2D node-link graph visualization of the extracted knowledge graph, including a details inspector and neighborhood search.
+
+#### Prerequisite: Build the Frontend Assets
+Before running the server, build the production visualizer assets:
+
+```bash
+cd visualizer
+npm install
+npm run build
+cd ..
+```
+
+#### Start the Server
+Start the local HTTP server to load the serialized model and host the visualizer:
+
+```bash
+npm run serve -- <path-to-target-project>
+```
+*Note: This command will attempt to automatically open your default browser at `http://localhost:3000` (or the next available port).*
+
+#### Running in Frontend Development Mode (with Hot Reloading)
+If you are developing the visualizer UI and want Hot Module Replacement (HMR):
+
+1. **Start the backend server** in the root directory to serve the API on port 3000:
+   ```bash
+   npm run serve -- <path-to-target-project>
+   ```
+2. **Start the Vite development server** in a separate terminal:
+   ```bash
+   cd visualizer
+   npm run dev
+   ```
+   *This serves the frontend UI at `http://localhost:5173` and proxies API requests to the backend server.*
 
 ---
 
