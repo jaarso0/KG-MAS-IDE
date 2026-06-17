@@ -155,4 +155,50 @@ describe('Stage 2 - Extract', () => {
     expect(callRef).toBeDefined();
     expect(callRef?.rawName).toBe('repo.save');
   });
+
+  test('Extracts FastAPI, SQLAlchemy, and Service metadata via framework adapters', () => {
+    const pythonCode = `
+from fastapi import FastAPI
+from sqlalchemy.ext.declarative import declarative_base
+
+app = FastAPI()
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+
+@app.post("/users")
+def create_user():
+    pass
+
+class UserService:
+    pass
+    `;
+    const parser = parserRegistry.getParser('python');
+    const tree = parser.parse(pythonCode);
+    const parsedFile = {
+      filePath: 'app/main.py',
+      absolutePath: '/absolute/app/main.py',
+      language: 'python' as const,
+      tree,
+      sourceCode: pythonCode
+    };
+
+    const extractor = extractorRegistry.getExtractor('python');
+    const partialModel = extractor.extract(parsedFile);
+
+    // Verify symbols
+    const userClass = partialModel.symbols.find(s => s.kind === 'class' && s.name === 'User');
+    expect(userClass).toBeDefined();
+    expect(userClass?.metadata?.dataModel).toEqual({ tableName: 'users' });
+
+    const createUserFunc = partialModel.symbols.find(s => s.kind === 'function' && s.name === 'create_user');
+    expect(createUserFunc).toBeDefined();
+    expect(createUserFunc?.metadata?.apiRoute).toEqual({ path: '/users', method: 'POST' });
+
+    const userServiceClass = partialModel.symbols.find(s => s.kind === 'class' && s.name === 'UserService');
+    expect(userServiceClass).toBeDefined();
+    expect(userServiceClass?.metadata?.isService).toBe(true);
+  });
 });
+

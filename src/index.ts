@@ -12,6 +12,8 @@ export { JsonSemanticModelStorage } from './storage/semantic-model-storage.js';
 export * from './semantic-model/types.js';
 export { KnowledgeGraph } from './stage5-graph/graph.js';
 export { startServer } from './serve.js';
+export { RetrievalEngine } from './retrieval/api.js';
+export * from './retrieval/types.js';
 
 // CLI Execution Support
 async function runCLI() {
