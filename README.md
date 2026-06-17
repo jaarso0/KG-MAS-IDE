@@ -95,6 +95,93 @@ If you are developing the visualizer UI and want Hot Module Replacement (HMR):
 
 ---
 
+## FastAPI Retrieval & Build Service
+
+MASAI-KG includes a FastAPI web service wrapper to allow external applications (like `MAS_IDE`) to query the retrieval engine and trigger model generation over HTTP.
+
+### 1. Setup Python Environment
+
+Ensure you have a Python environment with the required dependencies installed:
+
+```bash
+# Install FastAPI and Uvicorn dependencies
+pip install fastapi uvicorn pydantic
+```
+
+### 2. Start the Service
+
+From the `masai -kg - Copy (2)` root folder, start the server on port `8001`:
+
+```bash
+python -m uvicorn app:app --reload --port 8001
+```
+
+### 3. API Endpoints
+
+#### `POST /retrieve`
+Retrieves code context and subgraphs for LLM prompting.
+- **Request Body**:
+  ```json
+  {
+    "project_path": "C:/path/to/project",
+    "query": "authorization verification"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "files": ["src/auth.ts"],
+    "symbols": [
+      {
+        "id": "src/auth.ts::verify",
+        "kind": "function",
+        "name": "verify",
+        "qualifiedName": "verify",
+        "filePath": "src/auth.ts",
+        "range": {
+          "start": { "line": 10, "column": 0 },
+          "end": { "line": 20, "column": 0 }
+        }
+      }
+    ],
+    "flow": [
+      {
+        "step": 1,
+        "fromName": "login",
+        "toName": "verify",
+        "relationKind": "call"
+      }
+    ],
+    "snippets": [
+      {
+        "filePath": "src/auth.ts",
+        "symbolName": "verify",
+        "startLine": 10,
+        "endLine": 20,
+        "content": "function verify() {\n  ...\n}"
+      }
+    ]
+  }
+  ```
+
+#### `POST /build`
+Triggers model generation and builds `.masai/semantic-model.json` for the target project.
+- **Request Body**:
+  ```json
+  {
+    "project_path": "C:/path/to/project"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "success",
+    "message": "MASAI analysis completed successfully."
+  }
+  ```
+
+---
+
 ## Programmatic API Usage
 
 MASAI-KG can be integrated directly into other node applications.
